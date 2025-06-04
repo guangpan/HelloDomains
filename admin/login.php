@@ -18,10 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 检查是否为本地开发环境
     $is_localhost = in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1']);
     
-    // 验证 hCaptcha（非本地环境才验证）
+    // 检查是否配置了hCaptcha
+    $hcaptcha_configured = !empty($config['hcaptcha_site_key']) && !empty($config['hcaptcha_secret_key']);
+    
+    // 验证 hCaptcha（非本地环境且已配置hCaptcha才验证）
     $captcha_verified = false;
-    if (!$is_localhost) {
-        $hcaptcha_secret = "your-site-key"; //替换为你的 Site Key
+    if (!$is_localhost && $hcaptcha_configured) {
+        $hcaptcha_secret = $config['hcaptcha_secret_key'];
         $verify_data = array(
             'secret' => $hcaptcha_secret,
             'response' => $hcaptcha_response
@@ -38,14 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $response_data = json_decode($result);
         $captcha_verified = $response_data && $response_data->success;
+        
+        if (!$captcha_verified) {
+            $error = '请完成人机验证';
+        }
     } else {
-        // 本地环境直接通过验证
+        // 本地环境或未配置hCaptcha直接通过验证
         $captcha_verified = true;
     }
     
-    if (!$captcha_verified) {
-        $error = '请完成人机验证';
-    } else {
+    if ($captcha_verified) {
         try {
             $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = ?");
             $stmt->execute([$username]);
@@ -113,9 +118,9 @@ include '../includes/header.php';
             <input type="password" name="password" required>
         </div>
 
-        <?php if (!in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1'])): ?>
+        <?php if (!in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1']) && !empty($config['hcaptcha_site_key'])): ?>
         <div class="form-group">
-            <div class="h-captcha" data-sitekey="a024e944-8d08-469e-bd80-d232b57246e8"></div>
+            <div class="h-captcha" data-sitekey="<?php echo htmlspecialchars($config['hcaptcha_site_key']); ?>"></div>
         </div>
         <?php endif; ?>
         
@@ -123,7 +128,7 @@ include '../includes/header.php';
     </form>
 </div>
 
-<?php if (!in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1'])): ?>
+<?php if (!in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1']) && !empty($config['hcaptcha_site_key'])): ?>
 <!-- 添加 hCaptcha 脚本 -->
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <?php endif; ?>
